@@ -177,5 +177,5 @@ comptés dans le statut.
   date : la date est approchée, jamais celle du moment présent.
 - Compteur kilométrique : une valeur aberrante acceptée (jusqu'à
   5 000 000 km) bloque les suivantes, plus basses ; supprimez puis recréez la
-  fonctionnalité pour repartir.
+  fonctionnalité (ou l'appareil) pour repartir, sans redémarrer.
 - Jamais testé avec une vraie voiture.

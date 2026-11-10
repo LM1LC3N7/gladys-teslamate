@@ -238,5 +238,17 @@
     "file": "src/publisher.js",
     "from": "      this.retryAt = now + this.backoff;",
     "to": ""
+  },
+  {
+    "name": "r2: counters never forgotten",
+    "file": "src/app.js",
+    "from": "        this.latest.delete(id);\n        this.known.delete(id);\n      }\n    }\n  }",
+    "to": "      }\n    }\n  }"
+  },
+  {
+    "name": "r2: a removed feature keeps its counter",
+    "file": "src/app.js",
+    "from": "      // A feature removed from the device (an update): its counter starts over.\n      this.forgetCounters(",
+    "to": "      // A feature removed from the device (an update): its counter starts over.\n      void ("
   }
 ]

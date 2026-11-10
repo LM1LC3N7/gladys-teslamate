@@ -164,5 +164,6 @@ the status.
   state change), may be older than that date: the date is approximate, never
   the present moment.
 - Odometer: an absurd value accepted (up to 5,000,000 km) blocks the lower
-  ones after it; delete and create the feature again to start over.
+  ones after it; delete and create the feature (or the device) again to start
+  over, without a restart.
 - Never tested with a real car.

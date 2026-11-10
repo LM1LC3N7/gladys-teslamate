@@ -789,3 +789,31 @@ test('r1 m2: after 3 failed attempts in a row, one try a minute', async () => {
   await settle();
   assert.equal(client.options.reconnectPeriod, 10_000, 'back to 10 s once connected');
 });
+
+test('r2: an absurd odometer is left behind by deleting the feature or the device', async () => {
+  const device = createdCar({ features: ['odometer', 'battery_level'] });
+  const { gladys, mqtt, clock } = await setup({ devices: [device] });
+  mqtt.last.deliver('teslamate/cars/1/odometer', '4999999');
+  await clock.advance(1.5 * SECOND);
+  mqtt.last.deliver('teslamate/cars/1/odometer', '1700');
+  await clock.advance(1.5 * SECOND);
+  assert.equal(statesOf(gladys, F('odometer')).length, 1, 'blocked by the absurd value');
+  // The user removes the odometer feature (device updated), then adds it back.
+  const without = {
+    ...device,
+    features: device.features.filter((f) => f.external_id !== F('odometer')),
+  };
+  await gladys.fake.deviceUpdated(without);
+  await gladys.fake.deviceUpdated(createdCar({ features: ['odometer', 'battery_level'] }));
+  mqtt.last.deliver('teslamate/cars/1/odometer', '1701');
+  await clock.advance(1.5 * SECOND);
+  assert.equal(gladys.fake.lastState(F('odometer')), 1701, 'starts over');
+  // Deleting the whole device also starts over.
+  mqtt.last.deliver('teslamate/cars/1/odometer', '4999999');
+  await clock.advance(1.5 * SECOND);
+  await gladys.fake.deviceDeleted(createdCar({ features: ['odometer', 'battery_level'] }));
+  await gladys.fake.deviceCreated(createdCar({ features: ['odometer', 'battery_level'] }));
+  mqtt.last.deliver('teslamate/cars/1/odometer', '1702');
+  await clock.advance(1.5 * SECOND);
+  assert.equal(gladys.fake.lastState(F('odometer')), 1702);
+});

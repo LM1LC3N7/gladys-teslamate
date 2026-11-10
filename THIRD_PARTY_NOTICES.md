@@ -27,4 +27,8 @@ licence file in `node_modules`:
 ## Gladys-testkit (tests only)
 
 `test/helpers/clock.js` is a copy of `src/clock.mjs` of gladys-testkit
-(Apache-2.0, the same author as this integration). It is not part of the image.
+(Apache-2.0, the same author as this integration), and
+`test/fixtures/device.crt` / `test/fixtures/device.key` (a self-signed test
+certificate and its key, for the TLS test of `test/transport.test.js`) are
+copies of its `certs/device.crt` / `certs/device.key`. None of them is part of
+the image.

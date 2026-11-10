@@ -1022,6 +1022,13 @@ export class TeslaMateApp {
   /** The user created (or updated) a device: the values read so far are sent, dated. */
   async deviceCreated(device) {
     this.refreshCreated();
+    if (typeof device?.external_id === 'string' && this.isOurs(device)) {
+      // A feature removed from the device (an update): its counter starts over.
+      this.forgetCounters(
+        device.external_id,
+        new Set((device.features ?? []).map((f) => f?.external_id)),
+      );
+    }
     this.transports.delete(device?.external_id);
     for (const feature of device?.features ?? []) {
       const id = feature?.external_id;
@@ -1041,6 +1048,22 @@ export class TeslaMateApp {
         if (id.startsWith(`${device.external_id}:`)) {
           this.known.delete(id);
         }
+      }
+      this.forgetCounters(device.external_id);
+    }
+  }
+
+  /**
+   * The counters (odometer) of a device read so far are forgotten, except
+   * the features in `kept`: deleting the feature (or the device) is the way
+   * out of an absurd value that blocks every lower one after it.
+   */
+  forgetCounters(deviceId, kept = new Set()) {
+    for (const id of [...this.latest.keys()]) {
+      const key = id.split(':').at(-1);
+      if (id.startsWith(`${deviceId}:`) && FEATURES[key]?.kind === 'counter' && !kept.has(id)) {
+        this.latest.delete(id);
+        this.known.delete(id);
       }
     }
   }
