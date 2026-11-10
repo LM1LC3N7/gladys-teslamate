@@ -11,7 +11,7 @@
 // inherited or `__proto__` key).
 // -----------------------------------------------------------------------------
 
-import { readFile, rename, writeFile } from 'node:fs/promises';
+import { chmod, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { TIMINGS } from './constants.js';
 
 export const STATE_FILE = '/data/teslamate-state.json';
@@ -24,10 +24,28 @@ export function fileStore(path = STATE_FILE) {
   // One write at a time: two saves never share the temporary file.
   let chain = Promise.resolve();
   return {
+    /**
+     * The saved state: null when there is none (no file, or a file that is
+     * not ours: too large or not JSON, rewritten at the next save). Any other
+     * error (EIO, EACCES...) REJECTS: unreadable is not empty, the caller
+     * must not take it for "no stop".
+     */
     async load() {
+      let size;
       try {
-        const text = await readFile(path, 'utf8');
-        return text.length > 4096 ? null : JSON.parse(text);
+        size = (await stat(path)).size;
+      } catch (err) {
+        if (err?.code === 'ENOENT') {
+          return null;
+        }
+        throw err;
+      }
+      if (size > 4096) {
+        return null;
+      }
+      const text = await readFile(path, 'utf8');
+      try {
+        return JSON.parse(text);
       } catch {
         return null;
       }
@@ -37,6 +55,8 @@ export function fileStore(path = STATE_FILE) {
       const write = chain.then(async () => {
         const temporary = `${path}.tmp`;
         await writeFile(temporary, text, { mode: 0o600 });
+        // A temporary file left by a crash keeps its mode: set it again.
+        await chmod(temporary, 0o600);
         await rename(temporary, path);
       });
       chain = write.catch(() => {});

@@ -20,6 +20,13 @@ export class FakeMqttClient extends EventEmitter {
     callback?.(null, []);
   }
 
+  unsubscribe(topics, callback) {
+    const gone = new Set([].concat(topics));
+    this.subscriptions = this.subscriptions.filter((t) => !gone.has(t));
+    this.unsubscribed = (this.unsubscribed ?? 0) + 1;
+    callback?.(null);
+  }
+
   publish(topic, payload) {
     this.published.push({ topic, payload: String(payload) });
   }

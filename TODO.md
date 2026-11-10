@@ -41,8 +41,20 @@ Handoff document: what is done, what was decided, what comes next.
   elevation, shift state, deprecated latitude/longitude, `power` (unit
   uncertain).
 - Position off by default, rounded to 3 decimals before anything keeps it;
-  geofence on by default (a name the user drew). Turning off erases the
-  value shown ('' text).
+  geofence on by default (a name the user drew; it shows presence at home:
+  said in the docs and the form, to confirm with Louis). Turning off erases
+  the value shown ('' text), also at start and at every connection to Gladys
+  when it was turned off while the integration was not running (review r1
+  I2); turning on subscribes again so the broker re-sends its retained
+  values, dated (I3).
+- /data unreadable or slower than 5 s is not "empty": no connection, read
+  again every 10 s, one read at a time; after 6 tries, connected without the
+  stop and never writing over /data (review r1 I4).
+- The configuration read retry survives a start (only the final stop
+  cancels it); a start reads the created devices of the last Gladys sync
+  (review r1 I1).
+- Reconnection 10 s, 60 s after 3 failures in a row; Gladys failing: the
+  states wait 5 s doubling to 30 s, one warning a minute (review r1 m2, m3).
 - State as TeslaMate's English word (text): scenes independent of the
   language option.
 - Charging states mapped like gladys-tesla (Disconnected -> IDLE).

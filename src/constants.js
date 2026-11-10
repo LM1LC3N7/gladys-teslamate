@@ -43,6 +43,8 @@ export const TIMINGS = {
   connectTimeout: 10 * SECOND,
   /** Delay between two reconnection attempts to an unreachable broker. */
   reconnectPeriod: 10 * SECOND,
+  /** ...and this often after a few failed attempts in a row. */
+  reconnectSlow: MINUTE,
   /** The pending states are sent at this pace. */
   flushInterval: SECOND,
   /** A measurement (battery, power, temperatures...) is sent at most this often per feature. */

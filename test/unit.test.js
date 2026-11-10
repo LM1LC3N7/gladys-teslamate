@@ -232,14 +232,17 @@ test('publisher: budget per minute and spacing on the monotonic clock', async ()
   assert.equal(clock.pending, 0);
 });
 
-test('publisher: a failed send keeps the values and counts in the budget', async () => {
+test('publisher: a failed send keeps the values, waits, warns once', async () => {
   const clock = testClock();
   let fail = true;
   const sent = [];
+  const warnings = [];
+  let calls = 0;
   const gladys = {
     publishChangedStates: async (batch) => {
+      calls += 1;
       if (fail) {
-        throw new Error('429');
+        throw new Error('503');
       }
       sent.push(...batch);
       return { count: batch.length };
@@ -247,22 +250,31 @@ test('publisher: a failed send keeps the values and counts in the budget', async
   };
   const p = new StatePublisher({
     gladys,
-    logger: { warn() {} },
+    logger: { warn: (m) => warnings.push(m) },
     monotonic: clock.monotonic,
     timers: clock.timers,
-    budget: 3,
+    budget: 100,
   });
+  p.start();
   p.push('a', { state: 1 });
   p.push('b', { state: 1 });
-  await p.flush().catch(() => {});
-  fail = false;
+  await clock.advance(1000);
   p.push('a', { state: 2 });
-  await p.flush();
+  // Gladys down for 20 s: tries spaced 5 s, 10 s..., one warning.
+  await clock.advance(20_000);
+  assert.ok(warnings.length === 1, `${warnings.length} warnings`);
+  assert.ok(calls <= 4, `${calls} tries in 21 s: spaced 5 s, 10 s, 20 s`);
+  fail = false;
+  await clock.advance(30_000);
   assert.deepEqual(
-    sent.map((s) => [s.device_feature_external_id, s.state]),
-    [['a', 2]],
-    'the newer value wins, the budget counted the failed batch',
+    sent.map((s) => [s.device_feature_external_id, s.state]).sort(),
+    [
+      ['a', 2],
+      ['b', 1],
+    ],
+    'every value kept, the newer one wins',
   );
+  p.stop();
 });
 
 test('memory: bounded, never a secret, unknown keys dropped', () => {
@@ -292,7 +304,11 @@ test('file store: 0600, atomic, a broken file is read as nothing', async (t) => 
   assert.deepEqual(await store.load(), { auth: { failures: 1, until: 5 } });
   assert.equal((await stat(path)).mode & 0o777, 0o600);
   await writeFile(path, '{broken');
-  assert.equal(await store.load(), null);
+  assert.equal(await store.load(), null, 'not ours: rewritten at the next save');
+  await writeFile(path, 'x'.repeat(5000));
+  assert.equal(await store.load(), null, 'too large: never read in full');
+  // Unreadable is not empty: the read rejects (here EISDIR).
+  await assert.rejects(fileStore(dir).load());
 });
 
 test('age: seconds, minutes, hours', () => {

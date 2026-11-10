@@ -8,8 +8,9 @@ the messages TeslaMate publishes on **your** MQTT broker, on your local
 network: nothing goes through the Internet, Gladys never asks for a Tesla
 account.
 
-**Read only**: Gladys never sends anything to a car nor to the broker (no
-charging, climate or lock command). To control the car, see the Tesla
+**Read only**: Gladys never sends anything to a car and never publishes
+anything on the broker (it connects and subscribes to the TeslaMate topics,
+that is all: no charging, climate or lock command). To control the car, see the Tesla
 (Teslemetry) integration.
 
 Never tested with a real car nor a real TeslaMate: only with a fake broker
@@ -111,11 +112,15 @@ power (`power`, whose unit is not certain).
 
 ## Where the car is
 
-The geofence is the name of a zone you drew in TeslaMate; it is on by
-default. The position is off by default; when on, it is rounded to about
+The geofence is the name of a zone you drew in TeslaMate. **It is on by
+default**: Gladys then shows whether the car is at home (and so, often,
+whether you are). Turn "Show the geofence" off if you do not want it. The position is off by default; when on, it is rounded to about
 100 m before being kept in memory or sent, and is never written to the logs.
 Turning either off erases the value Gladys shows (empty text) and stops
-reading the topic. Gladys keeps no history of texts.
+reading the topic, also when the option was turned off while the integration
+was not running (the value is erased at the next start). Turning an option
+on again reads the last values kept by the broker (sent dated). Gladys keeps
+no history of texts.
 
 ## Status and badge
 
@@ -124,7 +129,14 @@ reading the topic. Gladys keeps no history of texts.
   badge of the car turns orange.
 - "waiting for TeslaMate", then after 30 s "nothing from TeslaMate": check
   `MQTT_HOST` and `MQTT_NAMESPACE` of TeslaMate and the "namespace" setting.
-- "MQTT broker unreachable": next try every 10 s.
+- "MQTT broker unreachable": next try every 10 s, then every minute after
+  three failures in a row.
+- "The state of the integration in /data could not be read": /data is slow
+  or unreadable; it is read again every 10 s, without connecting meanwhile (a
+  stop after a refusal it holds must be kept). After six tries, the
+  integration connects anyway, never writing over /data.
+- Gladys does not answer: the values wait, next try after 5 s, 10 s, 20 s,
+  then every 30 s; one warning a minute at most in the log.
 - "The MQTT broker refused the connection": no new try before 15 min, then
   1 h, 6 h, and every 24 h afterwards, even after a restart. Saving other
   credentials or pressing "Test the connection" (when it succeeds) tries
@@ -134,6 +146,9 @@ reading the topic. Gladys keeps no history of texts.
 - A message over 64 KB cuts the connection before it is read (in MQTT 5, the
   broker does not even send it); a value over 4 KB is ignored.
 - Badge: "local" while the broker is connected, "unreachable" otherwise.
+- "Connected" only says the broker answers and TeslaMate published on it: a
+  stopped TeslaMate looks like a sleeping car (the broker keeps the last
+  values, `healthy` included).
 
 At most 20 cars are followed; the other numbers are ignored and counted in
 the status.
@@ -142,4 +157,12 @@ the status.
 
 - Distances in km and temperatures in °C only (what TeslaMate publishes).
 - No command: read only in v1.
+- Charging power, current and voltage: when the car stops reporting them
+  (charge over, empty value), the last value stays shown; its date in Gladys
+  tells its age. To check with a real TeslaMate.
+- A value kept by the broker, sent dated at the `since` of the car (its last
+  state change), may be older than that date: the date is approximate, never
+  the present moment.
+- Odometer: an absurd value accepted (up to 5,000,000 km) blocks the lower
+  ones after it; delete and create the feature again to start over.
 - Never tested with a real car.

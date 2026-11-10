@@ -6,6 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryStore } from '../src/store.js';
+import { testClock } from './helpers/clock.js';
 import {
   CONFIG,
   DEVICE,
@@ -287,11 +288,15 @@ test('geofence turned off: erased and no longer read', async () => {
     config: { ...CONFIG, publish_geofence: false },
   });
   await clock.advance(2 * SECOND);
-  // Off at start: the value Gladys shows is erased once the option is turned off,
-  // not at every start (it was never on in this run).
+  // Off at start (turned off while the integration was not running): the
+  // value Gladys shows is erased, and the topic is not read.
+  assert.deepEqual(
+    statesOf(gladys, F('geofence')).map((s) => s.text),
+    [''],
+  );
   mqtt.last.deliver('teslamate/cars/1/geofence', 'Work');
   await clock.advance(2 * SECOND);
-  assert.equal(statesOf(gladys, F('geofence')).length, 0);
+  assert.equal(statesOf(gladys, F('geofence')).length, 1);
   await gladys.fake.configUpdated({ ...CONFIG, publish_geofence: true });
   mqtt.last.deliver('teslamate/cars/1/geofence', 'Work');
   await clock.advance(2 * SECOND);
@@ -617,4 +622,170 @@ test('a reconnection after a configuration change sends nothing already sent', a
   // Dated just after the value sent before the reconnection, not after the
   // older one the device list of Gladys still holds.
   assert.ok(Date.parse(added[0].created_at) >= reconnectedAt - 4 * SECOND);
+});
+
+test('r1 I1: a configuration saved during the retry of getConfig: the values still go out', async () => {
+  const plan = [true, false];
+  let calls = 0;
+  const device = createdCar({ features: ['battery_level'] });
+  const { gladys, mqtt, clock } = await setup({
+    devices: [device],
+    open: false,
+    getConfig: (original) => {
+      calls += 1;
+      return plan.length === 0 || plan.shift() ? original() : Promise.reject(new Error('timeout'));
+    },
+  });
+  assert.match(statusText(gladys), /could not be read/);
+  await gladys.fake.configUpdated(CONFIG);
+  assert.equal(mqtt.clients.length, 1);
+  mqtt.last.open();
+  mqtt.last.deliver('teslamate/cars/1/battery_level', '64');
+  await clock.advance(1.5 * SECOND);
+  assert.equal(gladys.fake.lastState(F('battery_level')), 64, 'the created device is known');
+  // The retry of the read still runs, and keeps the client.
+  await clock.advance(6 * SECOND);
+  assert.equal(calls, 3, 'the read was tried again after 5 s');
+  assert.equal(mqtt.clients.length, 1);
+});
+
+test('r1 I2: an option off at start erases the value Gladys shows, once', async () => {
+  const device = createdCar({
+    features: ['position', 'geofence'],
+    values: {
+      position: { value: '48.858, 2.294', at: SINCE },
+      geofence: { value: 'Home', at: SINCE },
+    },
+  });
+  const { gladys, clock } = await setup({
+    devices: [device],
+    config: { ...CONFIG, publish_geofence: false },
+    open: false,
+  });
+  await clock.advance(1.5 * SECOND);
+  assert.equal(gladys.fake.lastState(F('position')), '', 'even without the broker');
+  assert.equal(gladys.fake.lastState(F('geofence')), '');
+  await gladys.disconnect();
+  await gladys.connect();
+  await clock.advance(1.5 * SECOND);
+  assert.equal(statesOf(gladys, F('position')).length, 1, 'idempotent');
+});
+
+test('r1 I3: an option turned on reads the retained values again, dated', async () => {
+  const device = createdCar({ features: ['position', 'battery_level'] });
+  const { gladys, mqtt, clock } = await setup({ devices: [device] });
+  deliverCar(mqtt.last);
+  await clock.advance(3 * SECOND);
+  assert.equal(statesOf(gladys, F('position')).length, 0);
+  await gladys.fake.configUpdated({ ...CONFIG, publish_position: true });
+  assert.deepEqual(mqtt.last.subscriptions, ['teslamate/cars/+/+', 'teslamate/cars/+/+']);
+  // The broker sends its retained values again for the new subscription.
+  deliverCar(mqtt.last);
+  await clock.advance(3 * SECOND);
+  const [position] = statesOf(gladys, F('position'));
+  assert.equal(position.text, '48.858, 2.294');
+  assert.equal(position.created_at, new Date(Date.parse(SINCE)).toISOString(), 'dated');
+});
+
+test('r1 I4: /data slow at start: no connection before it answers, its stop kept', async () => {
+  const until = Date.parse('2026-03-01T18:00:00Z');
+  const store = memoryStore({ auth: { failures: 3, until } });
+  let release;
+  const slow = new Promise((resolve) => {
+    release = resolve;
+  });
+  const load = store.load.bind(store);
+  store.load = async () => {
+    await slow;
+    return load();
+  };
+  const clock = testClock({ start: Date.parse('2026-03-01T12:00:00Z') });
+  // The start waits for /data (5 s at most): the setup runs while the clock moves.
+  const starting = setup({ store, open: false, clock });
+  await settle();
+  await clock.advance(6 * SECOND);
+  const { gladys, mqtt } = await within(starting);
+  assert.equal(mqtt.clients.length, 0, 'not read: no connection');
+  assert.match(statusText(gladys), /could not be read.*10 s/);
+  release();
+  await settle();
+  await clock.advance(10 * SECOND);
+  assert.equal(mqtt.clients.length, 0, 'the stop of /data holds');
+  assert.match(statusText(gladys), /Stopped/);
+  assert.equal(store.data.auth.failures, 3, 'never overwritten');
+  assert.equal(store.saves, 0);
+});
+
+test('r1 I4: /data unreadable (EIO): tried again, then connected without writing over it', async () => {
+  const store = memoryStore({ auth: { failures: 3, until: Date.parse('2026-03-02T00:00:00Z') } });
+  let reads = 0;
+  store.load = async () => {
+    reads += 1;
+    const err = new Error('EIO: i/o error');
+    err.code = 'EIO';
+    throw err;
+  };
+  const { gladys, mqtt, clock } = await setup({ store, open: false });
+  assert.equal(mqtt.clients.length, 0);
+  assert.match(statusText(gladys), /\/data could not be read/);
+  await clock.advance(70 * SECOND);
+  assert.equal(reads, 6, 'one read every 10 s, six at most');
+  assert.equal(mqtt.clients.length, 1, 'then connected');
+  mqtt.last.refuse(5);
+  await settle();
+  assert.equal(store.saves, 0, 'nothing written over the unread state');
+  assert.match(statusText(gladys), /refused/);
+});
+
+test('r1 I5: a swallowed CONNECT, then accepted, then swallowed: no refusal', async () => {
+  const { gladys, mqtt, app } = await setup({ open: false });
+  const client = mqtt.last;
+  const hooks = client.options;
+  hooks.onAttempt();
+  hooks.onOpen();
+  client.emit('close');
+  await settle();
+  hooks.onAttempt();
+  client.open();
+  await settle();
+  client.connected = false;
+  client.emit('close');
+  hooks.onAttempt();
+  hooks.onOpen();
+  client.emit('close');
+  await settle();
+  assert.equal(app.memory.auth.failures, 0);
+  assert.doesNotMatch(statusText(gladys), /refused/);
+});
+
+test('r1 I5: retained values before `since` in the burst are dated at since', async () => {
+  const device = createdCar({ features: ['battery_level'] });
+  const { gladys, mqtt, clock } = await setup({ devices: [device] });
+  mqtt.last.deliver('teslamate/cars/1/battery_level', '70', { retain: true });
+  await clock.advance(500);
+  mqtt.last.deliver('teslamate/cars/1/since', SINCE, { retain: true });
+  await clock.advance(3 * SECOND);
+  const [battery] = statesOf(gladys, F('battery_level'));
+  assert.equal(battery?.created_at, new Date(Date.parse(SINCE)).toISOString());
+});
+
+test('r1 m2: after 3 failed attempts in a row, one try a minute', async () => {
+  const { gladys, mqtt } = await setup({ open: false });
+  const client = mqtt.last;
+  client.options.reconnectPeriod = 10_000;
+  for (let i = 0; i < 3; i += 1) {
+    client.emit(
+      'error',
+      Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }),
+    );
+    client.emit('close');
+    await settle();
+  }
+  assert.equal(client.options.reconnectPeriod, 60_000);
+  client.emit('error', Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }));
+  await settle();
+  assert.match(statusText(gladys), /next try in 60 s/);
+  client.open();
+  await settle();
+  assert.equal(client.options.reconnectPeriod, 10_000, 'back to 10 s once connected');
 });

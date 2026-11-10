@@ -27,5 +27,11 @@ the notes of the version's GitHub Release.
   `maximumPacketSize` and a guard on the socket); MQTT 3.1.1 fallback.
 - "Test the connection" button naming the cars TeslaMate publishes.
 - User guides in English and French.
+- An option turned off erases its value even when it was turned off while
+  the integration was stopped; turned on, the values kept by the broker are
+  read again.
+- /data slow or unreadable at start is never taken for "no stop".
+- The connection is tried every minute after three failures in a row; the
+  states wait longer while Gladys fails, with one warning a minute.
 
 [Unreleased]: https://github.com/LM1LC3N7/gladys-teslamate/commits/main

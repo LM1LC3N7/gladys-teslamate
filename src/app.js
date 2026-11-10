@@ -57,6 +57,9 @@ import { authWait, fileStore, normalizeMemory, serializeMemory } from './store.j
 
 const decoder = new TextDecoder('utf-8', { fatal: true });
 
+/** The features behind an option of the configuration. */
+const OPTIONAL = ['geofence', 'position'];
+
 /** The text of a payload, or undefined (too large, not UTF-8). */
 function payloadText(payload) {
   if (!payload || payload.length > LIMITS.payloadBytes) {
@@ -74,6 +77,11 @@ const sameValue = (a, b) =>
 
 /** How long /data may take to answer at start: past it, no stop is known. */
 const STORE_TIMEOUT = 5000;
+/** /data unreadable at start: read again this often, at most MEMORY_TRIES times. */
+const MEMORY_RETRY = 10_000;
+const MEMORY_TRIES = 6;
+/** Failed connection attempts in a row before the slow pace. */
+const RECONNECT_SLOW_AFTER = 3;
 
 export class TeslaMateApp {
   constructor({
@@ -143,26 +151,58 @@ export class TeslaMateApp {
 
   // --- Memory (/data) ----------------------------------------------------------
 
+  /**
+   * The state of /data, read once: true when known (read, or no file). A
+   * read slower than STORE_TIMEOUT or failing (EIO...) is NOT "empty": false
+   * is returned and the caller tries again later. One read at a time: a slow
+   * read still running is waited for again, never doubled, and its answer
+   * counts even when it comes late.
+   */
   async loadMemory() {
     if (this.memory) {
-      return this.memory;
+      return true;
+    }
+    if (!this.reading) {
+      this.reading = this.store.load().then(
+        (raw) => {
+          this.reading = undefined;
+          this.applyMemory(raw);
+          return true;
+        },
+        (err) => {
+          this.reading = undefined;
+          this.warnOnce(`data:${err?.code}`, `Reading /data failed: ${err?.code ?? err?.message}`);
+          return false;
+        },
+      );
     }
     let timer;
-    const raw = await Promise.race([
-      this.store.load().catch(() => null),
+    const read = await Promise.race([
+      this.reading,
       new Promise((resolve) => {
-        timer = this.timers.setTimeout(() => resolve(null), STORE_TIMEOUT);
+        timer = this.timers.setTimeout(() => resolve(false), STORE_TIMEOUT);
       }),
     ]);
     this.timers.clearTimeout(timer);
+    return read || Boolean(this.memory);
+  }
+
+  applyMemory(raw) {
+    if (this.memory) {
+      return;
+    }
     const now = this.now();
     this.memory = normalizeMemory(raw, now);
+    this.memoryWritable = true;
     this.authDue =
       this.memory.auth.until > now ? this.monotonic() + (this.memory.auth.until - now) : 0;
-    return this.memory;
   }
 
   async saveMemory() {
+    if (!this.memoryWritable) {
+      // /data was never read: writing would overwrite a stop we do not know.
+      return;
+    }
     try {
       await this.store.save(serializeMemory(this.memory));
     } catch (err) {
@@ -185,11 +225,15 @@ export class TeslaMateApp {
     }, delay);
   }
 
-  clearTimers() {
-    for (const id of Object.values(this.timersById)) {
-      this.timers.clearTimeout(id);
+  /** Every timer, but the retry of the configuration read unless `all` (the final stop). */
+  clearTimers({ all = true } = {}) {
+    const kept = all ? undefined : this.timersById.getConfig;
+    for (const [name, id] of Object.entries(this.timersById)) {
+      if (name !== 'getConfig' || all) {
+        this.timers.clearTimeout(id);
+      }
     }
-    this.timersById = {};
+    this.timersById = kept === undefined ? {} : { getConfig: kept };
   }
 
   // --- Lifecycle -----------------------------------------------------------------
@@ -208,17 +252,23 @@ export class TeslaMateApp {
     try {
       raw = await this.gladys.getConfig();
     } catch (err) {
+      if (this.stopped) {
+        return;
+      }
       const retry = TIMINGS.configRetry;
       const wait = retry[Math.min(this.configTries, retry.length - 1)];
       this.configTries += 1;
       this.logger.warn(`Reading the configuration failed: ${err.message}`);
       await this.setStatus(false, T.configUnread(age(wait)), { force: true, remember: false });
-      // Its own timer, outside the generations: a start() never cancels it,
-      // the reading of the configuration is what everything waits for.
+      // Its own timer, outside the generations: only the final stop cancels
+      // it (clearTimers keeps it), a start() meanwhile never does.
       this.timersById.getConfig = this.timers.setTimeout(() => {
         this.timersById.getConfig = undefined;
         this.gladysConnected().catch((e) => this.logger.error(`getConfig: ${e.message}`));
       }, wait);
+      return;
+    }
+    if (this.stopped) {
       return;
     }
     this.configTries = 0;
@@ -226,6 +276,7 @@ export class TeslaMateApp {
     const next = normalizeConfig(raw);
     if (this.started && connectionKey(next) === this.connKey) {
       await this.applySoft(next, raw);
+      await this.eraseDisallowed();
       this.publishedDevices = undefined;
       this.transports.clear();
       // The last status again (it was lost with Gladys), then what is known now.
@@ -256,10 +307,16 @@ export class TeslaMateApp {
     const before = this.config;
     this.rawConfig = raw ?? {};
     this.config = next;
-    for (const key of ['geofence', 'position']) {
+    let turnedOn = false;
+    for (const key of OPTIONAL) {
       if (allowed(key, before) && !allowed(key, next)) {
         await this.withdraw(key);
+      } else if (!allowed(key, before) && allowed(key, next)) {
+        turnedOn = true;
       }
+    }
+    if (turnedOn) {
+      this.resubscribe();
     }
   }
 
@@ -296,6 +353,36 @@ export class TeslaMateApp {
     }
   }
 
+  /**
+   * The values of an option that is off are erased in Gladys, whenever the
+   * option was turned off (even while the integration was not running):
+   * at every start and every connection to Gladys. Idempotent.
+   */
+  async eraseDisallowed() {
+    for (const key of OPTIONAL) {
+      if (!allowed(key, this.config)) {
+        await this.withdraw(key);
+      }
+    }
+  }
+
+  /**
+   * An option turned on: the same subscription again. A broker MUST then
+   * send its retained values once more (MQTT 3.1.1 3.8.4, MQTT 5 with the
+   * default retain handling); they go the dated way, never as new.
+   */
+  resubscribe() {
+    const client = this.client;
+    if (!client?.connected) {
+      return;
+    }
+    client.subscribe([`${topicPrefix(this.config)}+/+`], { qos: 0 }, (err) => {
+      if (err) {
+        this.logger.warn(`Subscription failed: ${err.message}`);
+      }
+    });
+  }
+
   isOurs(device) {
     return (
       typeof device?.external_id === 'string' &&
@@ -304,8 +391,11 @@ export class TeslaMateApp {
   }
 
   async start(raw = {}) {
-    await this.loadMemory();
+    if (this.stopped) {
+      return;
+    }
     this.stop({ final: false });
+    const generation = this.generation;
     this.started = true;
     this.rawConfig = raw ?? {};
     this.config = normalizeConfig(raw);
@@ -314,6 +404,41 @@ export class TeslaMateApp {
     this.protocolVersion = 5;
     this.lastError = undefined;
     this.unanswered = 0;
+    this.failedAttempts = 0;
+    this.resetCars();
+    this.publishedDevices = undefined;
+    this.transports.clear();
+    this.publisher.clear();
+    // The devices Gladys sent with its last synchronization: the values of
+    // the created features go out even if the configuration read failed.
+    this.refreshCreated();
+    // Gladys is reached whatever the broker does: the erasures below and the
+    // values leave even while the broker is stopped or unreachable.
+    this.publisher.start();
+    await this.eraseDisallowed();
+    if (this.config.problem) {
+      await this.setStatus(false, T.problem(this.config.problem));
+      return;
+    }
+    if (!(await this.loadMemory())) {
+      if (generation !== this.generation) {
+        return;
+      }
+      this.memoryTries = (this.memoryTries ?? 0) + 1;
+      if (this.memoryTries < MEMORY_TRIES) {
+        await this.setStatus(false, T.dataUnreadable(age(MEMORY_RETRY)));
+        this.later('memory', MEMORY_RETRY, () => this.start(this.rawConfig));
+        return;
+      }
+      // Still unreadable after a minute: go on without the stop it may hold,
+      // never writing over it (saveMemory stays off until a read succeeds).
+      this.logger.warn('/data still unreadable: connecting without its state');
+      this.memory = normalizeMemory(null, this.now());
+      this.memoryWritable = false;
+    }
+    if (generation !== this.generation) {
+      return;
+    }
     const credentials = credentialsKey(this.config);
     if (
       this.credKey !== undefined &&
@@ -326,14 +451,6 @@ export class TeslaMateApp {
       await this.saveMemory();
     }
     this.credKey = credentials;
-    this.resetCars();
-    this.publishedDevices = undefined;
-    this.transports.clear();
-    this.publisher.clear();
-    if (this.config.problem) {
-      await this.setStatus(false, T.problem(this.config.problem));
-      return;
-    }
     const wait = this.authDue - this.monotonic();
     if (wait > 0) {
       await this.setStatus(false, T.stopped(age(wait)));
@@ -349,7 +466,6 @@ export class TeslaMateApp {
     if (generation !== this.generation) {
       return;
     }
-    this.publisher.start();
     // A CONNECT left without CONNACK, armed once the transport opened (only
     // then may the credentials have left), cleared by a CONNACK.
     const UNANSWERED = 'the broker closed the connection without answering';
@@ -375,6 +491,10 @@ export class TeslaMateApp {
     }
     this.client = client;
     const current = () => generation === this.generation && this.client === client;
+    // The reconnection pace: 10 s, then 60 s after RECONNECT_SLOW_AFTER failed
+    // attempts in a row (a wrong address, a broker down for the night).
+    let fastPeriod = client.options?.reconnectPeriod;
+    this.retryPeriod = fastPeriod ?? TIMINGS.reconnectPeriod;
     client.on('packetreceive', (packet) => {
       if (packet?.cmd === 'connack') {
         pending = undefined;
@@ -384,6 +504,10 @@ export class TeslaMateApp {
       if (current()) {
         this.unanswered = 0;
         this.lastError = undefined;
+        this.failedAttempts = 0;
+        if (client.options && fastPeriod !== undefined) {
+          client.options.reconnectPeriod = fastPeriod;
+        }
         this.onConnect().catch((err) => this.logger.error(`After connection: ${err.message}`));
       }
     });
@@ -418,11 +542,19 @@ export class TeslaMateApp {
         pending = 'no answer from the broker to the connection';
       }
       this.warnOnce(`broker:${reason}`, `MQTT broker: ${reason}`);
-      this.setStatus(false, T.unreachable(reason));
+      this.setStatus(false, T.unreachable(reason, age(this.retryPeriod)));
     });
     client.on('close', () => {
       if (!current()) {
         return;
+      }
+      if (!this.wasConnected) {
+        this.failedAttempts += 1;
+        if (this.failedAttempts >= RECONNECT_SLOW_AFTER && client.options) {
+          fastPeriod ??= client.options.reconnectPeriod;
+          client.options.reconnectPeriod = TIMINGS.reconnectSlow;
+          this.retryPeriod = TIMINGS.reconnectSlow;
+        }
       }
       if (pending) {
         const reason = pending;
@@ -433,7 +565,10 @@ export class TeslaMateApp {
       if (this.wasConnected) {
         this.wasConnected = false;
         this.timers.clearTimeout(this.timersById.noData);
-        this.setStatus(false, this.lastError ? T.unreachable(this.lastError) : T.lost);
+        this.setStatus(
+          false,
+          this.lastError ? T.unreachable(this.lastError, age(this.retryPeriod)) : T.lost,
+        );
         this.publishAllTransports().catch(() => {});
       }
     });
@@ -449,7 +584,7 @@ export class TeslaMateApp {
       return;
     }
     this.warnOnce(`broker:${reason}`, `MQTT broker: ${reason}`);
-    await this.setStatus(false, T.unreachable(reason));
+    await this.setStatus(false, T.unreachable(reason, age(this.retryPeriod)));
   }
 
   hasCredentials() {
@@ -469,7 +604,6 @@ export class TeslaMateApp {
     const generation = this.generation;
     this.logger.warn(`MQTT broker refused the connection: ${reason}`);
     this.endClient();
-    this.publisher.stop();
     const failures = this.memory.auth.failures + 1;
     const wait = authWait(failures);
     this.memory.auth = { failures, until: this.now() + wait };
@@ -494,7 +628,7 @@ export class TeslaMateApp {
   /** `final`: the container stops (handleShutdown); otherwise a restart follows. */
   stop({ final = true } = {}) {
     this.generation += 1;
-    this.clearTimers();
+    this.clearTimers({ all: final });
     this.publisher.stop();
     this.endClient();
     if (final) {

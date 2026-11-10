@@ -35,13 +35,25 @@ export class StatePublisher {
     this.throttled = new Set();
     this.timer = undefined;
     this.flushing = undefined;
+    /** After a failed send: no new try before (monotonic), the wait doubling. */
+    this.retryAt = -Infinity;
+    this.backoff = 0;
   }
 
   start() {
     this.stop();
     this.timer = this.timers.setInterval(() => {
-      this.flush().catch((err) => this.logger.warn(`Sending the states failed: ${err.message}`));
+      this.flush().catch((err) => this.warnFailure(err));
     }, TIMINGS.flushInterval);
+  }
+
+  /** One warning, then at most one a minute while Gladys keeps failing. */
+  warnFailure(err) {
+    const now = this.monotonic();
+    if (this.lastWarn === undefined || now - this.lastWarn >= 60_000) {
+      this.lastWarn = now;
+      this.logger.warn(`Sending the states failed: ${err.message}`);
+    }
   }
 
   stop() {
@@ -89,7 +101,7 @@ export class StatePublisher {
     const now = this.monotonic();
     this.window = this.window.filter((t) => now - t < 60_000 && t <= now);
     let room = this.budget - this.window.length;
-    if (room <= 0 || this.pending.size === 0) {
+    if (room <= 0 || this.pending.size === 0 || now < this.retryAt) {
       return 0;
     }
     const batch = [];
@@ -119,6 +131,8 @@ export class StatePublisher {
       for (const entry of batch) {
         this.lastSent.set(entry.device_feature_external_id, now);
       }
+      this.backoff = 0;
+      this.retryAt = -Infinity;
       const count = Math.min(result?.count ?? batch.length, batch.length);
       for (let i = 0; i < count; i += 1) {
         this.window.push(now);
@@ -137,6 +151,9 @@ export class StatePublisher {
           this.pending.set(id, value);
         }
       }
+      // Gladys down or refusing: the next try waits 5 s, doubling to 30 s.
+      this.backoff = Math.min(Math.max(this.backoff * 2, 5000), 30_000);
+      this.retryAt = now + this.backoff;
       throw err;
     }
   }

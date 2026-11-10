@@ -143,8 +143,8 @@
         "fr": "Afficher la zone (geofence) de la voiture"
       },
       "description": {
-        "en": "On by default: the name of the TeslaMate geofence, empty outside of them.",
-        "fr": "Activé par défaut : le nom de la zone TeslaMate, vide en dehors."
+        "en": "On by default: the name of the TeslaMate geofence, empty outside of them. It shows whether the car is at home: turn off if you do not want that.",
+        "fr": "Activé par défaut : le nom de la zone TeslaMate, vide en dehors. Il montre si la voiture est à la maison : désactivez si vous ne le voulez pas."
       },
       "required": false,
       "default": true

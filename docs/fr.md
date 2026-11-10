@@ -8,8 +8,9 @@ voiture. Elle lit les messages que TeslaMate publie sur **votre** broker MQTT,
 sur votre réseau local : rien ne passe par Internet, aucun compte Tesla n'est
 demandé à Gladys.
 
-**Lecture seule** : Gladys n'envoie jamais rien à une voiture ni au broker
-(ni charge, ni climatisation, ni verrouillage). Pour piloter la voiture,
+**Lecture seule** : Gladys n'envoie jamais rien à une voiture et ne publie
+jamais rien sur le broker (elle s'y connecte et s'abonne aux sujets de
+TeslaMate, c'est tout : ni charge, ni climatisation, ni verrouillage). Pour piloter la voiture,
 voyez l'intégration Tesla (Teslemetry).
 
 Jamais testé avec une vraie voiture ni un vrai TeslaMate : seulement avec un
@@ -118,11 +119,16 @@ la puissance de la batterie (`power`, dont l'unité n'est pas sûre).
 ## Où est la voiture
 
 La zone (geofence) est le nom d'une zone que vous avez dessinée dans
-TeslaMate ; elle est activée par défaut. La position est désactivée par
+TeslaMate. **Elle est activée par défaut** : Gladys montre alors si la voiture
+est à la maison (et donc, souvent, si vous y êtes). Désactivez « Afficher la
+zone (geofence) » si vous ne le voulez pas. La position est désactivée par
 défaut ; activée, elle est arrondie à environ 100 m avant d'être gardée en
 mémoire ou envoyée, et n'est jamais écrite dans les journaux. Désactiver
 l'une ou l'autre efface la valeur affichée par Gladys (texte vide) et arrête
-la lecture du sujet. Gladys ne garde pas d'historique des textes.
+la lecture du sujet, y compris si l'option a été coupée pendant que
+l'intégration ne tournait pas (l'effacement a lieu au démarrage suivant).
+Réactiver une option relit les dernières valeurs gardées par le broker
+(envoyées datées). Gladys ne garde pas d'historique des textes.
 
 ## Statut et pastille
 
@@ -132,7 +138,15 @@ la lecture du sujet. Gladys ne garde pas d'historique des textes.
 - « en attente de TeslaMate », puis après 30 s « rien de TeslaMate » :
   vérifiez `MQTT_HOST` et `MQTT_NAMESPACE` de TeslaMate et le réglage
   « Espace de noms ».
-- « Broker MQTT injoignable » : nouvel essai toutes les 10 s.
+- « Broker MQTT injoignable » : nouvel essai toutes les 10 s, puis toutes les
+  minutes après trois échecs de suite.
+- « L'état de l'intégration dans /data n'a pas pu être lu » : /data est lent
+  ou illisible ; il est relu toutes les 10 s, sans connexion entre-temps (un
+  arrêt après refus qu'il garde doit être respecté). Après six essais,
+  l'intégration se connecte quand même, sans jamais réécrire /data.
+- Gladys ne répond plus : les valeurs attendent, nouvel essai après 5 s,
+  10 s, 20 s puis toutes les 30 s ; un seul avertissement par minute dans le
+  journal.
 - « Le broker MQTT a refusé la connexion » : pas de nouvel essai avant
   15 min, puis 1 h, 6 h, et ensuite toutes les 24 h, même après un
   redémarrage. Enregistrer d'autres identifiants ou appuyer sur « Tester la
@@ -144,6 +158,9 @@ la lecture du sujet. Gladys ne garde pas d'historique des textes.
 - Un message de plus de 64 Ko coupe la connexion avant d'être lu (en MQTT 5,
   le broker ne l'envoie même pas) ; une valeur de plus de 4 Ko est ignorée.
 - Pastille : « local » quand le broker est connecté, « injoignable » sinon.
+- « Connecté » dit seulement que le broker répond et que TeslaMate y a
+  publié : un TeslaMate arrêté ne se distingue pas d'une voiture endormie
+  (le broker garde les dernières valeurs, `healthy` compris).
 
 Au plus 20 voitures sont suivies ; les autres numéros sont ignorés et
 comptés dans le statut.
@@ -152,4 +169,13 @@ comptés dans le statut.
 
 - Distances en km et températures en °C seulement (ce que publie TeslaMate).
 - Pas de commande : lecture seule en v1.
+- Puissance, courant et tension de charge : quand la voiture cesse de les
+  donner (charge finie, valeur vide), la dernière valeur reste affichée ;
+  sa date dans Gladys en donne l'âge. À vérifier avec un vrai TeslaMate.
+- Une valeur gardée par le broker, envoyée datée à la date `since` de la
+  voiture (son dernier changement d'état), peut être plus ancienne que cette
+  date : la date est approchée, jamais celle du moment présent.
+- Compteur kilométrique : une valeur aberrante acceptée (jusqu'à
+  5 000 000 km) bloque les suivantes, plus basses ; supprimez puis recréez la
+  fonctionnalité pour repartir.
 - Jamais testé avec une vraie voiture.

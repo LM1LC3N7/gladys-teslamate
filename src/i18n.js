@@ -120,10 +120,15 @@ export const T = {
       `La configuration n'a pas pu être lue dans Gladys : nouvel essai dans ${wait}.`,
     ),
   connecting: both('Connecting to the MQTT broker...', 'Connexion au broker MQTT...'),
-  unreachable: (reason) =>
+  unreachable: (reason, wait = '10 s') =>
     both(
-      `MQTT broker unreachable (${reason}): next try in 10 s.`,
-      `Broker MQTT injoignable (${reason}) : nouvel essai dans 10 s.`,
+      `MQTT broker unreachable (${reason}): next try in ${wait}.`,
+      `Broker MQTT injoignable (${reason}) : nouvel essai dans ${wait}.`,
+    ),
+  dataUnreadable: (wait) =>
+    both(
+      `The state of the integration in /data could not be read: next try in ${wait}.`,
+      `L'état de l'intégration dans /data n'a pas pu être lu : nouvel essai dans ${wait}.`,
     ),
   lost: both(
     'Connection to the MQTT broker lost: reconnecting.',

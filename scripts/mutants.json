@@ -136,5 +136,107 @@
     "file": "src/app.js",
     "from": "    this.pendingRetained = new Set();",
     "to": "    this.pendingRetained = new Set();\n    this.known = new Map();"
+  },
+  {
+    "name": "r1: socket guard without limit",
+    "file": "src/mqtt.js",
+    "from": "  const guard = new PacketGuard();",
+    "to": "  const guard = new PacketGuard(Infinity);"
+  },
+  {
+    "name": "r1: no maximumPacketSize in MQTT 5",
+    "file": "src/mqtt.js",
+    "from": "    ...(protocolVersion === 5 ? { properties: { maximumPacketSize: MAX_PACKET } } : {}),",
+    "to": ""
+  },
+  {
+    "name": "r1: TLS never verified",
+    "file": "src/mqtt.js",
+    "from": "        rejectUnauthorized: config.verifyCertificate,",
+    "to": "        rejectUnauthorized: false,"
+  },
+  {
+    "name": "r1: CONNACK errors end the client",
+    "file": "src/mqtt.js",
+    "from": "    reconnectOnConnackError: true,",
+    "to": "    reconnectOnConnackError: false,"
+  },
+  {
+    "name": "r1: failed batch values dropped",
+    "file": "src/publisher.js",
+    "from": "        if (!this.pending.has(id)) {",
+    "to": "        if (false) {"
+  },
+  {
+    "name": "r1: one swallowed CONNECT is a refusal",
+    "file": "src/app.js",
+    "from": "this.hasCredentials() && this.unanswered >= 2",
+    "to": "this.hasCredentials() && this.unanswered >= 1"
+  },
+  {
+    "name": "r1: swallowed counter never reset by a connection",
+    "file": "src/app.js",
+    "from": "        this.unanswered = 0;\n        this.lastError = undefined;\n        this.failedAttempts = 0;",
+    "to": "        this.lastError = undefined;\n        this.failedAttempts = 0;"
+  },
+  {
+    "name": "r1: banned (138) not a refusal",
+    "file": "src/mqtt.js",
+    "from": "[4, 5, 134, 135, 138]",
+    "to": "[4, 5, 134, 135]"
+  },
+  {
+    "name": "r1: retained burst not waited for",
+    "file": "src/app.js",
+    "from": "this.later('retained', TIMINGS.retainedSettle,",
+    "to": "this.later('retained', 0,"
+  },
+  {
+    "name": "r1 I1: getConfig retry cleared by a start",
+    "file": "src/app.js",
+    "from": "      if (name !== 'getConfig' || all) {",
+    "to": "      if (true) {"
+  },
+  {
+    "name": "r1 I1: created features not read at start",
+    "file": "src/app.js",
+    "from": "    this.refreshCreated();\n    // Gladys is reached",
+    "to": "    // Gladys is reached"
+  },
+  {
+    "name": "r1 I2: option off at start not erased",
+    "file": "src/app.js",
+    "from": "    await this.eraseDisallowed();\n    if (this.config.problem) {",
+    "to": "    if (this.config.problem) {"
+  },
+  {
+    "name": "r1 I3: option on does not resubscribe",
+    "file": "src/app.js",
+    "from": "    if (turnedOn) {\n      this.resubscribe();",
+    "to": "    if (turnedOn) {"
+  },
+  {
+    "name": "r1 I4: unreadable /data taken as empty",
+    "file": "src/app.js",
+    "from": "    return read || Boolean(this.memory);",
+    "to": "    if (!read) this.applyMemory(null);\n    return true;"
+  },
+  {
+    "name": "r1 I4: writes over an unread /data",
+    "file": "src/app.js",
+    "from": "    if (!this.memoryWritable) {",
+    "to": "    if (false) {"
+  },
+  {
+    "name": "r1 m2: no slow reconnection pace",
+    "file": "src/app.js",
+    "from": "        if (this.failedAttempts >= RECONNECT_SLOW_AFTER && client.options) {",
+    "to": "        if (false) {"
+  },
+  {
+    "name": "r1 m3: no wait after a failed send",
+    "file": "src/publisher.js",
+    "from": "      this.retryAt = now + this.backoff;",
+    "to": ""
   }
 ]
