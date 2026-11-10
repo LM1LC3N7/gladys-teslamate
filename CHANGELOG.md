@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-10
+
 ### Added
 
 - Teslas read from TeslaMate over the local MQTT broker of the user (read
@@ -36,4 +38,5 @@ the notes of the version's GitHub Release.
 - The connection is tried every minute after three failures in a row; the
   states wait longer while Gladys fails, with one warning a minute.
 
-[Unreleased]: https://github.com/LM1LC3N7/gladys-teslamate/commits/main
+[Unreleased]: https://github.com/LM1LC3N7/gladys-teslamate/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/LM1LC3N7/gladys-teslamate/releases/tag/v0.1.1

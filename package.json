@@ -1,6 +1,6 @@
 {
   "name": "gladys-teslamate",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Gladys Assistant external integration for TeslaMate, the self-hosted Tesla data logger: battery, range, charge, doors, tyres and state of each car, read from the local MQTT broker TeslaMate publishes to. Read only. Unofficial, not affiliated with Tesla or TeslaMate.",
   "type": "module",
