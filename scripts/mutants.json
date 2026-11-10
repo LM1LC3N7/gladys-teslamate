@@ -1,0 +1,140 @@
+[
+  {
+    "name": "retained value sent as new",
+    "file": "src/app.js",
+    "from": "    if (retained) {",
+    "to": "    if (false) {"
+  },
+  {
+    "name": "retained equal to Gladys sent again",
+    "file": "src/app.js",
+    "from": "    if (known && sameValue(known.value, latest.value)) {",
+    "to": "    if (false) {"
+  },
+  {
+    "name": "odometer may go down",
+    "file": "src/app.js",
+    "from": "      if (value.state < highest) {",
+    "to": "      if (false) {"
+  },
+  {
+    "name": "options ignored (position read when off)",
+    "file": "src/car.js",
+    "from": "  return option === undefined || config[option] === true;",
+    "to": "  return true;"
+  },
+  {
+    "name": "disallowed topics read",
+    "file": "src/app.js",
+    "from": "    if (!isMeta && (key === undefined || !allowed(key, this.config))) {",
+    "to": "    if (!isMeta && key === undefined) {"
+  },
+  {
+    "name": "position not erased when turned off",
+    "file": "src/app.js",
+    "from": "        if (known && known.value.text !== '') {",
+    "to": "        if (false) {"
+  },
+  {
+    "name": "dated in the future",
+    "file": "src/app.js",
+    "from": "    at = Math.min(at, now);",
+    "to": ""
+  },
+  {
+    "name": "retained dated now instead of after Gladys",
+    "file": "src/app.js",
+    "from": "known.at + 1;",
+    "to": "this.now();"
+  },
+  {
+    "name": "retained without since dated now",
+    "file": "src/app.js",
+    "from": "      at = this.cars.get(latest.carId)?.since;",
+    "to": "      at = now;"
+  },
+  {
+    "name": "strict number loosened ('' read as 0)",
+    "file": "src/car.js",
+    "from": "const NUMBER = /^-?\\d{1,9}(\\.\\d{1,9})?$/;",
+    "to": "const NUMBER = /^.*$/;"
+  },
+  {
+    "name": "position not rounded",
+    "file": "src/car.js",
+    "from": "    const r = Number(v.toFixed(POSITION_DECIMALS));",
+    "to": "    const r = v;"
+  },
+  {
+    "name": "no stop after a refusal",
+    "file": "src/app.js",
+    "from": "    const wait = this.authDue - this.monotonic();",
+    "to": "    const wait = 0;"
+  },
+  {
+    "name": "refusal not persisted",
+    "file": "src/app.js",
+    "from": "    this.memory.auth = { failures, until: this.now() + wait };",
+    "to": "    this.memory.auth = { failures: 0, until: 0 };"
+  },
+  {
+    "name": "swallowed CONNECT never a refusal",
+    "file": "src/app.js",
+    "from": "this.unanswered >= 2",
+    "to": "this.unanswered >= 99"
+  },
+  {
+    "name": "other credentials do not lift the stop",
+    "file": "src/app.js",
+    "from": "      credentials !== this.credKey &&",
+    "to": "      false &&"
+  },
+  {
+    "name": "PacketGuard lets large packets through",
+    "file": "src/mqtt.js",
+    "from": "      if (length + this.header.length > this.max) {",
+    "to": "      if (false) {"
+  },
+  {
+    "name": "payload size unbounded",
+    "file": "src/app.js",
+    "from": "  if (!payload || payload.length > LIMITS.payloadBytes) {",
+    "to": "  if (!payload) {"
+  },
+  {
+    "name": "no budget per minute",
+    "file": "src/publisher.js",
+    "from": "    let room = this.budget - this.window.length;",
+    "to": "    let room = 100000;"
+  },
+  {
+    "name": "measurements not spaced",
+    "file": "src/publisher.js",
+    "from": "        now - last < TIMINGS.measurementInterval",
+    "to": "        false"
+  },
+  {
+    "name": "no car limit",
+    "file": "src/app.js",
+    "from": "    if (this.cars.size >= LIMITS.cars) {",
+    "to": "    if (false) {"
+  },
+  {
+    "name": "getConfig failure never retried",
+    "file": "src/app.js",
+    "from": "        this.gladysConnected().catch((e) => this.logger.error(`getConfig: ${e.message}`));",
+    "to": ""
+  },
+  {
+    "name": "no test cooldown",
+    "file": "src/app.js",
+    "from": "mono - this.lastTest < TIMINGS.testCooldown",
+    "to": "false"
+  },
+  {
+    "name": "what was sent forgotten at every (re)start",
+    "file": "src/app.js",
+    "from": "    this.pendingRetained = new Set();",
+    "to": "    this.pendingRetained = new Set();\n    this.known = new Map();"
+  }
+]

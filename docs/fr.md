@@ -1,67 +1,155 @@
-# Template de démonstration
+# TeslaMate pour Gladys
 
-Ceci est la documentation utilisateur de l'intégration. Gladys ré-héberge ce
-fichier et affiche un lien **Documentation** permanent vers lui dans l'écran
-de configuration (dans la langue de l'utilisateur, avec l'anglais en repli) —
-c'est au moment de configurer que l'utilisateur en a le plus besoin. Gardez
-les courtes indications d'accueil dans les blocs `section` du `config_schema`
-du manifest ; mettez ici le pas-à-pas détaillé (captures d'écran, dépannage…).
+Cette intégration affiche dans Gladys vos Tesla telles que les voit
+[TeslaMate](https://docs.teslamate.org), le journal Tesla auto-hébergé :
+batterie, autonomie, charge, portes, coffres, fenêtres, verrouillage, mode
+Sentinelle, températures, pression des pneus, compteur et état de chaque
+voiture. Elle lit les messages que TeslaMate publie sur **votre** broker MQTT,
+sur votre réseau local : rien ne passe par Internet, aucun compte Tesla n'est
+demandé à Gladys.
 
-## Ce que vous obtenez
+**Lecture seule** : Gladys n'envoie jamais rien à une voiture ni au broker
+(ni charge, ni climatisation, ni verrouillage). Pour piloter la voiture,
+voyez l'intégration Tesla (Teslemetry).
 
-Six appareils de démonstration apparaissent après l'installation : une
-station météo (vraies données Open-Meteo), un interrupteur, une lampe
-variable, une prise connectée avec mesure de puissance, un détecteur de
-mouvement et une caméra.
+Jamais testé avec une vraie voiture ni un vrai TeslaMate : seulement avec un
+faux broker et un faux Gladys, d'après la documentation MQTT de TeslaMate.
+Non officiel, sans lien avec Tesla ni avec TeslaMate.
 
-## Configuration
+## Avant de commencer
 
-1. Ouvrez l'onglet **Configuration** de l'intégration.
-2. Renseignez la **latitude** et la **longitude** que la station météo de
-   démonstration doit observer (Paris par défaut), et choisissez votre unité
-   de température. L'**intervalle de rafraîchissement** règle la fréquence
-   de lecture de la station météo et de la puissance de la prise : toutes
-   les 5 minutes par défaut, toutes les minutes au plus.
-3. Enregistrez : les appareils apparaissent dans l'onglet **Découverte**,
-   prêts à être ajoutés.
+1. TeslaMate tourne et publie sur un broker MQTT (Mosquitto par exemple) :
+   variable `MQTT_HOST` de TeslaMate (et `MQTT_USERNAME`, `MQTT_PASSWORD`,
+   `MQTT_TLS` s'il y a lieu). `DISABLE_MQTT` ne doit pas valoir `true`.
+2. Le broker est joignable depuis la machine de Gladys (port 1883, ou 8883 en
+   TLS).
+3. Si TeslaMate a un `MQTT_NAMESPACE`, notez-le : ses sujets sont alors
+   `teslamate/<espace>/cars/...` au lieu de `teslamate/cars/...`.
 
-Le réglage **Préférer la connexion locale** pilote la prise de
-démonstration : elle affiche en badge le canal réellement utilisé (local ou
-cloud), avec un point orange quand elle fonctionne en mode dégradé (local
-refusé, bascule cloud).
+Vérification rapide depuis une machine du réseau :
+`mosquitto_sub -h <broker> -t 'teslamate/cars/+/state' -v` doit afficher l'état
+de chaque voiture.
 
-## Actions
+## Réglages
 
-- **Tester le fournisseur météo** — effectue une requête en direct vers
-  Open-Meteo et affiche la température et l'humidité actuelles sous le
-  bouton.
-- **Identifier un appareil** — choisissez un de vos appareils dans la liste
-  et il se signale (la lampe de démonstration « clignote » dans les logs).
+| Réglage                             | Rôle                                                                                                                                                                                |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Adresse du broker MQTT              | L'adresse IP ou le nom du broker (port 1883), ou `mqtts://adresse:8883` en TLS.                                                                                                     |
+| Utilisateur, Mot de passe           | Ceux du broker, s'il en demande. Le mot de passe est gardé par Gladys dans sa base, jamais réaffiché, envoyé seulement à votre broker. Un mot de passe sans utilisateur est refusé. |
+| Vérifier le certificat TLS          | Activé par défaut ; à désactiver seulement pour un broker au certificat auto-signé sur votre réseau local.                                                                          |
+| Espace de noms TeslaMate            | Le `MQTT_NAMESPACE` de TeslaMate, vide s'il n'y en a pas (lettres, nombres, `_` et `-`).                                                                                            |
+| Afficher la zone (geofence)         | Activé par défaut : le nom de la zone TeslaMate où est la voiture (Maison, Travail...), vide en dehors.                                                                             |
+| Afficher la position, arrondie      | Désactivé par défaut. Activé : latitude et longitude arrondies à 3 décimales (environ 110 m nord-sud, moins est-ouest), en texte, par exemple `48.858, 2.294`.                      |
+| Langue des noms des fonctionnalités | Français ou anglais.                                                                                                                                                                |
 
-## Scènes
+Le bouton **Tester la connexion** se connecte au broker avec les réglages
+enregistrés, écoute 10 s et nomme les voitures que publie TeslaMate. Deux
+tests sont espacés d'au moins 10 s.
 
-L'intégration ajoute ses propres cartes à l'éditeur de scènes (Gladys 5.1
-ou plus récent), dans la catégorie **Intégrations** :
+## Ajouter une voiture
 
-- **Mouvement détecté** (déclencheur) — lance la scène quand un détecteur
-  de démonstration voit bouger quelque chose. Choisissez éventuellement le
-  détecteur et ce qui a bougé (personne, animal) ; laissés vides, toute
-  détection correspond. Les actions suivantes peuvent lire ce qui a bougé
-  avec `{{triggerEvent.data.target}}`.
-- **Identifier un appareil** (action) — fait se signaler l'appareil choisi.
-  Elle indique si l'appareil a pu se signaler, pour que les actions
-  suivantes puissent en dépendre.
+Les voitures apparaissent dans l'onglet Découverte dès que le broker envoie
+leurs sujets (en quelques secondes : le broker garde la dernière valeur de
+chaque sujet). Cliquez sur « Ajouter à Gladys ». Une voiture n'a que les
+fonctionnalités dont TeslaMate a publié une valeur (une voiture sans capteur
+de pression des pneus n'en a pas).
 
-## Tableau de bord
+L'identifiant d'une voiture est son numéro dans TeslaMate (`car_id`) et
+l'espace de noms : `car:default-1` sans espace, `car:<espace>-1` avec.
+Changer d'espace de noms fait donc de nouveaux appareils. Si la même voiture
+apparaît sous deux numéros (une voiture retirée puis ajoutée de nouveau dans
+TeslaMate, l'ancienne gardée par le broker), le paramètre
+`TESLAMATE_SAME_CAR_AS` de chacune donne le numéro de l'autre : ajoutez celle
+dont les valeurs bougent. Le numéro de série (VIN) n'est jamais affiché ni
+gardé : seule une empreinte salée, en mémoire, sert à cette comparaison.
 
-Ajoutez le widget **État de la démo** à un tableau de bord : il affiche en
-direct la température de la station météo et la puissance de la prise du
-bureau, la connexion utilisée par la prise (en orange si dégradée) et la
-position observée. Son bouton **Identifier la lampe** fait se signaler la
-lampe de démonstration.
+## Fonctionnalités
 
-## Dépannage
+| Fonctionnalité                                 | Sujet TeslaMate                                              | Unité                                                                                     |
+| ---------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| Niveau de batterie, niveau utilisable          | `battery_level`, `usable_battery_level`                      | %                                                                                         |
+| Autonomie nominale, estimée                    | `rated_battery_range_km`, `est_battery_range_km`             | km                                                                                        |
+| État de charge                                 | `charging_state`                                             | En charge, Démarrage, Arrêtée, Pas de courant, Terminée / Débranchée                      |
+| Branchée                                       | `plugged_in`                                                 | oui / non                                                                                 |
+| Puissance, courant, tension de charge          | `charger_power`, `charger_actual_current`, `charger_voltage` | kW, A, V                                                                                  |
+| Énergie ajoutée (dernière charge)              | `charge_energy_added`                                        | kWh                                                                                       |
+| Limite de charge                               | `charge_limit_soc`                                           | %                                                                                         |
+| Températures intérieure, extérieure            | `inside_temp`, `outside_temp`                                | °C                                                                                        |
+| Climatisation en marche                        | `is_climate_on`                                              | oui / non                                                                                 |
+| Compteur kilométrique                          | `odometer`                                                   | km                                                                                        |
+| Verrouillée, mode Sentinelle                   | `locked`, `sentry_mode`                                      | oui / non                                                                                 |
+| Portes, coffre, coffre avant, fenêtres ouverts | `doors_open`, `trunk_open`, `frunk_open`, `windows_open`     | oui / non                                                                                 |
+| Pression des quatre pneus                      | `tpms_pressure_fl`, `_fr`, `_rl`, `_rr`                      | bar                                                                                       |
+| État (TeslaMate)                               | `state`                                                      | le mot de TeslaMate : `online`, `asleep`, `offline`, `charging`, `driving`, `updating`... |
+| Zone (geofence)                                | `geofence`                                                   | texte, si l'option est activée                                                            |
+| Position (arrondie)                            | `location`                                                   | texte, si l'option est activée                                                            |
 
-L'intégration journalise tout ce qu'elle fait : consultez les logs de
-l'intégration depuis l'interface Gladys (ou `docker logs` sur l'hôte) avec
-`LOG_LEVEL=debug` pour le détail complet.
+Toutes sont en lecture seule. Les mots de l'état restent ceux de TeslaMate
+(en anglais) pour que vos scènes ne dépendent pas de la langue.
+
+Jamais lus : le VIN (sauf l'empreinte en mémoire ci-dessus), la navigation
+(`active_route` : destination et sa position), la vitesse, le cap,
+l'altitude, le rapport engagé, les anciens sujets `latitude` / `longitude`,
+la puissance de la batterie (`power`, dont l'unité n'est pas sûre).
+
+## Valeurs : quand et comment elles arrivent
+
+- Une valeur que TeslaMate publie pendant que Gladys écoute part tout de
+  suite. Les mesures (batterie, puissance, températures, pneus...) d'une même
+  fonctionnalité partent au plus toutes les 10 s, la dernière gardée ; portes,
+  verrouillage, états ne sont pas espacés (envoyés à la seconde qui suit). Gladys reçoit au plus 250
+  valeurs par minute de cette intégration.
+- Une valeur gardée par le broker (au démarrage, après une coupure) n'est
+  jamais présentée comme neuve : égale à ce qu'affiche Gladys, rien n'est
+  envoyé ; différente, elle est envoyée **datée** (ce qui ne lance aucune
+  scène) juste après le dernier changement connu de Gladys, ou, pour une
+  fonctionnalité encore vide, à la date du dernier changement d'état de la
+  voiture (`since`). Sans cette date, rien n'est envoyé avant une valeur en
+  direct.
+- Une valeur vide (« la voiture ne donne pas de valeur », par exemple quand
+  elle est éteinte), illisible ou hors des bornes n'est pas une mesure :
+  rien n'est envoyé, la dernière valeur reste. Un texte n'est jamais envoyé
+  comme 0.
+- Le compteur kilométrique ne baisse jamais : une valeur plus basse est
+  ignorée.
+- Quand vous ajoutez une voiture, les valeurs déjà lues sont envoyées
+  datées.
+
+## Où est la voiture
+
+La zone (geofence) est le nom d'une zone que vous avez dessinée dans
+TeslaMate ; elle est activée par défaut. La position est désactivée par
+défaut ; activée, elle est arrondie à environ 100 m avant d'être gardée en
+mémoire ou envoyée, et n'est jamais écrite dans les journaux. Désactiver
+l'une ou l'autre efface la valeur affichée par Gladys (texte vide) et arrête
+la lecture du sujet. Gladys ne garde pas d'historique des textes.
+
+## Statut et pastille
+
+- « Connecté : N voiture(s) vue(s) dans TeslaMate. » : tout va bien. Si
+  TeslaMate signale un problème pour une voiture (`healthy` à `false`), le
+  statut le dit et la pastille de la voiture passe à l'orange.
+- « en attente de TeslaMate », puis après 30 s « rien de TeslaMate » :
+  vérifiez `MQTT_HOST` et `MQTT_NAMESPACE` de TeslaMate et le réglage
+  « Espace de noms ».
+- « Broker MQTT injoignable » : nouvel essai toutes les 10 s.
+- « Le broker MQTT a refusé la connexion » : pas de nouvel essai avant
+  15 min, puis 1 h, 6 h, et ensuite toutes les 24 h, même après un
+  redémarrage. Enregistrer d'autres identifiants ou appuyer sur « Tester la
+  connexion » (s'il réussit) relance tout de suite. Une connexion avec mot de
+  passe fermée deux fois de suite sans réponse du broker compte comme un
+  refus.
+- Un broker qui ne parle pas MQTT 5 est utilisé en MQTT 3.1.1 (dit dans le
+  statut).
+- Un message de plus de 64 Ko coupe la connexion avant d'être lu (en MQTT 5,
+  le broker ne l'envoie même pas) ; une valeur de plus de 4 Ko est ignorée.
+- Pastille : « local » quand le broker est connecté, « injoignable » sinon.
+
+Au plus 20 voitures sont suivies ; les autres numéros sont ignorés et
+comptés dans le statut.
+
+## Limites connues
+
+- Distances en km et températures en °C seulement (ce que publie TeslaMate).
+- Pas de commande : lecture seule en v1.
+- Jamais testé avec une vraie voiture.

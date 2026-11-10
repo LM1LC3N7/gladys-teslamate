@@ -1,8 +1,8 @@
 {
-  "name": "gladys-integration-template-js",
-  "version": "1.0.0",
+  "name": "gladys-teslamate",
+  "version": "0.1.0",
   "private": true,
-  "description": "Official starter template to build an external integration for Gladys Assistant with the JavaScript SDK.",
+  "description": "Gladys Assistant external integration for TeslaMate, the self-hosted Tesla data logger: battery, range, charge, doors, tyres and state of each car, read from the local MQTT broker TeslaMate publishes to. Read only. Unofficial, not affiliated with Tesla or TeslaMate.",
   "type": "module",
   "main": "index.js",
   "scripts": {
@@ -10,13 +10,21 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "node --test"
+    "test": "node --test --test-timeout=60000",
+    "audit": "npm audit --omit=dev",
+    "cover": "node scripts/cover.mjs cover.png",
+    "validate:manifest": "npx --yes github:GladysAssistant/integration-store ."
   },
   "engines": {
     "node": ">=22"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LM1LC3N7/gladys-teslamate.git"
+  },
   "dependencies": {
-    "@gladysassistant/integration-sdk": "^0.16.0"
+    "@gladysassistant/integration-sdk": "^0.16.0",
+    "mqtt": "^5.16.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

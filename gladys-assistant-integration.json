@@ -1,177 +1,203 @@
 {
   "manifest_version": 1,
   "type": "device",
-  "name": "Demo Devices Template",
+  "name": "TeslaMate",
   "description": {
-    "en": "Starter template showing sensors, a switch, a dimmable light and a smart plug.",
-    "fr": "Template de démarrage : capteurs, interrupteur, lampe variable et prise connectée."
+    "en": "Your Teslas through TeslaMate: battery, range, charge, doors and tyres, read on local MQTT.",
+    "fr": "Vos Tesla via TeslaMate : batterie, autonomie, charge, portes et pneus, lus en MQTT local."
   },
-  "version": "1.0.0",
-  "docker_image": "ghcr.io/gladysassistant/integration-template-js:1.0.0",
+  "version": "0.1.0",
+  "docker_image": "ghcr.io/lm1lc3n7/gladys-teslamate:0.1.0",
   "gladys_version": ">=5.1.0",
-  "cover_image": "https://raw.githubusercontent.com/GladysAssistant/integration-template-js/master/cover.png",
-  "categories": ["lighting", "security", "environment"],
-  "transports": ["local", "cloud"],
+  "cover_image": "https://raw.githubusercontent.com/LM1LC3N7/gladys-teslamate/main/cover.png",
+  "categories": ["vehicles"],
+  "transports": ["local"],
   "config_schema": [
     {
       "key": "intro",
       "type": "section",
-      "label": { "en": "Getting started", "fr": "Pour commencer" },
+      "label": {
+        "en": "Your Teslas in Gladys, through TeslaMate",
+        "fr": "Vos Tesla dans Gladys, via TeslaMate"
+      },
       "description": {
-        "en": "The demo weather station reads real data from the free Open-Meteo API: pick the coordinates to observe. No account, no API key.",
-        "fr": "La station météo de démonstration lit de vraies données via l'API gratuite Open-Meteo : choisissez les coordonnées à observer. Pas de compte, pas de clé d'API."
+        "en": "Reads what TeslaMate, the self-hosted Tesla data logger, publishes on YOUR MQTT broker: battery level, range, charging state and power, doors, trunks, windows, locks, Sentry mode, temperatures, tyre pressures, odometer and state of each car. Read only: Gladys never sends anything to a car. Set up TeslaMate with your broker first (MQTT_HOST), then type the address of the broker below. Nothing goes through the Internet. Never tested with a real car. Unofficial, not affiliated with Tesla nor with TeslaMate.",
+        "fr": "Lit ce que TeslaMate, le journal Tesla auto-hébergé, publie sur VOTRE broker MQTT : niveau de batterie, autonomie, état et puissance de charge, portes, coffres, fenêtres, verrouillage, mode Sentinelle, températures, pression des pneus, compteur et état de chaque voiture. Lecture seule : Gladys n'envoie jamais rien à une voiture. Réglez d'abord TeslaMate avec votre broker (MQTT_HOST), puis saisissez l'adresse du broker ci-dessous. Rien ne passe par Internet. Jamais testé avec une vraie voiture. Non officiel, sans lien avec Tesla ni avec TeslaMate."
       },
       "links": [
         {
-          "url": "https://open-meteo.com/en/docs",
-          "label": { "en": "Open-Meteo documentation", "fr": "Documentation Open-Meteo" }
+          "url": "https://github.com/LM1LC3N7/gladys-teslamate/blob/main/docs/fr.md",
+          "label": {
+            "en": "Guide (French)",
+            "fr": "Guide (français)"
+          }
+        },
+        {
+          "url": "https://github.com/LM1LC3N7/gladys-teslamate/blob/main/docs/en.md",
+          "label": {
+            "en": "Guide (English)",
+            "fr": "Guide (anglais)"
+          }
+        },
+        {
+          "url": "https://docs.teslamate.org/docs/integrations/mqtt",
+          "label": {
+            "en": "TeslaMate and MQTT",
+            "fr": "TeslaMate et MQTT"
+          }
         }
       ]
     },
     {
-      "key": "latitude",
-      "type": "number",
-      "label": { "en": "Latitude", "fr": "Latitude" },
-      "description": {
-        "en": "Latitude used for the demo weather sensor.",
-        "fr": "Latitude utilisée par le capteur météo de démonstration."
+      "key": "broker_url",
+      "type": "string",
+      "label": {
+        "en": "MQTT broker address",
+        "fr": "Adresse du broker MQTT"
       },
-      "placeholder": { "en": "e.g. 48.8566", "fr": "ex. 48.8566" },
-      "required": true,
-      "default": 48.8566,
-      "min": -90,
-      "max": 90
+      "description": {
+        "en": "The broker TeslaMate publishes to (its MQTT_HOST): its IP address (port 1883), or mqtts://address:8883 in TLS.",
+        "fr": "Le broker où publie TeslaMate (son MQTT_HOST) : son adresse IP (port 1883), ou mqtts://adresse:8883 en TLS."
+      },
+      "placeholder": {
+        "en": "192.168.1.20",
+        "fr": "192.168.1.20"
+      },
+      "required": true
     },
     {
-      "key": "longitude",
-      "type": "number",
-      "label": { "en": "Longitude", "fr": "Longitude" },
-      "description": {
-        "en": "Longitude used for the demo weather sensor.",
-        "fr": "Longitude utilisée par le capteur météo de démonstration."
+      "key": "username",
+      "type": "string",
+      "label": {
+        "en": "User name",
+        "fr": "Utilisateur"
       },
-      "placeholder": { "en": "e.g. 2.3522", "fr": "ex. 2.3522" },
-      "required": true,
-      "default": 2.3522,
-      "min": -180,
-      "max": 180
+      "description": {
+        "en": "The user of the broker, if it asks for one.",
+        "fr": "L'utilisateur du broker, s'il en demande un."
+      },
+      "required": false
     },
     {
-      "key": "unit",
+      "key": "password",
+      "type": "secret",
+      "label": {
+        "en": "Password",
+        "fr": "Mot de passe"
+      },
+      "description": {
+        "en": "The password of the broker: kept by Gladys in its database, never shown again, sent only to your broker.",
+        "fr": "Le mot de passe du broker : gardé par Gladys dans sa base, jamais réaffiché, envoyé seulement à votre broker."
+      },
+      "required": false
+    },
+    {
+      "key": "verify_certificate",
+      "type": "boolean",
+      "label": {
+        "en": "Verify the TLS certificate of the broker (mqtts)",
+        "fr": "Vérifier le certificat TLS du broker (mqtts)"
+      },
+      "description": {
+        "en": "Turn off only for a broker with a self-signed certificate on your local network.",
+        "fr": "À désactiver seulement pour un broker au certificat auto-signé sur votre réseau local."
+      },
+      "required": false,
+      "default": true
+    },
+    {
+      "key": "namespace",
+      "type": "string",
+      "label": {
+        "en": "TeslaMate namespace (optional)",
+        "fr": "Espace de noms TeslaMate (facultatif)"
+      },
+      "description": {
+        "en": "Only if TeslaMate has an MQTT_NAMESPACE: the same value (its topics are then teslamate/<namespace>/cars/...). Empty otherwise.",
+        "fr": "Seulement si TeslaMate a un MQTT_NAMESPACE : la même valeur (ses sujets sont alors teslamate/<espace>/cars/...). Vide sinon."
+      },
+      "placeholder": {
+        "en": "None",
+        "fr": "Aucun"
+      },
+      "required": false,
+      "default": ""
+    },
+    {
+      "key": "privacy",
+      "type": "section",
+      "label": {
+        "en": "Where the car is",
+        "fr": "Où est la voiture"
+      },
+      "description": {
+        "en": "TeslaMate also publishes where each car is. Gladys may show the name of the TeslaMate geofence the car is in (Home, Work... the zones you drew in TeslaMate), and, if you allow it, its position rounded to about 100 m. Turning an option off erases the value Gladys shows. The navigation (destination) is never read.",
+        "fr": "TeslaMate publie aussi où est chaque voiture. Gladys peut afficher le nom de la zone (geofence) TeslaMate où elle se trouve (Maison, Travail... les zones dessinées dans TeslaMate) et, si vous l'autorisez, sa position arrondie à environ 100 m. Désactiver une option efface la valeur affichée par Gladys. La navigation (destination) n'est jamais lue."
+      }
+    },
+    {
+      "key": "publish_geofence",
+      "type": "boolean",
+      "label": {
+        "en": "Show the geofence of the car",
+        "fr": "Afficher la zone (geofence) de la voiture"
+      },
+      "description": {
+        "en": "On by default: the name of the TeslaMate geofence, empty outside of them.",
+        "fr": "Activé par défaut : le nom de la zone TeslaMate, vide en dehors."
+      },
+      "required": false,
+      "default": true
+    },
+    {
+      "key": "publish_position",
+      "type": "boolean",
+      "label": {
+        "en": "Show the position of the car, rounded",
+        "fr": "Afficher la position de la voiture, arrondie"
+      },
+      "description": {
+        "en": "Off by default. On: latitude and longitude rounded to 3 decimals (about 100 m), as a text.",
+        "fr": "Désactivé par défaut. Activé : latitude et longitude arrondies à 3 décimales (environ 100 m), en texte."
+      },
+      "required": false,
+      "default": false
+    },
+    {
+      "key": "language",
       "type": "select",
-      "label": { "en": "Temperature unit", "fr": "Unité de température" },
-      "required": false,
-      "default": "celsius",
-      "options": [
-        { "value": "celsius", "label": { "en": "Celsius", "fr": "Celsius" } },
-        { "value": "fahrenheit", "label": { "en": "Fahrenheit", "fr": "Fahrenheit" } }
-      ]
-    },
-    {
-      "key": "poll_frequency",
-      "type": "number",
-      "label": { "en": "Refresh interval (s)", "fr": "Intervalle de rafraîchissement (s)" },
-      "description": {
-        "en": "How often sensors are polled, in seconds (one minute minimum).",
-        "fr": "Fréquence d'interrogation des capteurs, en secondes (une minute minimum)."
+      "label": {
+        "en": "Language of the feature names",
+        "fr": "Langue des noms des fonctionnalités"
       },
       "required": false,
-      "default": 300,
-      "min": 60,
-      "max": 3600
+      "default": "fr",
+      "options": [
+        {
+          "value": "fr",
+          "label": {
+            "en": "French",
+            "fr": "Français"
+          }
+        },
+        {
+          "value": "en",
+          "label": {
+            "en": "English",
+            "fr": "Anglais"
+          }
+        }
+      ]
     }
   ],
   "actions": [
     {
-      "key": "test_weather",
-      "label": { "en": "Test the weather provider", "fr": "Tester le fournisseur météo" },
-      "timeout_seconds": 30
-    },
-    {
-      "key": "identify",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ]
-    }
-  ],
-  "scene_triggers": [
-    {
-      "key": "motion_detected",
-      "label": { "en": "Motion detected", "fr": "Mouvement détecté" },
-      "description": {
-        "en": "A demo motion sensor saw a person or an animal move.",
-        "fr": "Un détecteur de démonstration a vu bouger une personne ou un animal."
+      "key": "test_connection",
+      "label": {
+        "en": "Test the connection",
+        "fr": "Tester la connexion"
       },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Sensor", "fr": "Détecteur" }
-        },
-        {
-          "key": "target",
-          "type": "multi_select",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" },
-          "options": [
-            { "value": "person", "label": { "en": "Person", "fr": "Personne" } },
-            { "value": "animal", "label": { "en": "Animal", "fr": "Animal" } }
-          ]
-        }
-      ],
-      "variables": [
-        {
-          "key": "target",
-          "type": "string",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" }
-        }
-      ]
-    }
-  ],
-  "scene_actions": [
-    {
-      "key": "identify_device",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "description": {
-        "en": "Make a device signal itself (the demo light blinks).",
-        "fr": "Fait se signaler un appareil (la lampe de démonstration clignote)."
-      },
-      "timeout_seconds": 15,
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ],
-      "outputs": [
-        {
-          "key": "signalled",
-          "type": "boolean",
-          "label": { "en": "Device signalled", "fr": "Appareil signalé" }
-        }
-      ]
-    }
-  ],
-  "widgets": [
-    {
-      "key": "demo_status",
-      "label": { "en": "Demo status", "fr": "État de la démo" },
-      "description": {
-        "en": "Live temperature and plug power, plug connection and observed location.",
-        "fr": "Température et puissance en direct, connexion de la prise, position observée."
-      },
-      "icon": "activity",
-      "action_timeout_seconds": 15
+      "timeout_seconds": 45
     }
   ]
 }
