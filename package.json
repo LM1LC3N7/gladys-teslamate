@@ -23,7 +23,7 @@
     "url": "git+https://github.com/LM1LC3N7/gladys-teslamate.git"
   },
   "dependencies": {
-    "@gladysassistant/integration-sdk": "^0.16.0",
+    "@gladysassistant/integration-sdk": "^0.16.1",
     "mqtt": "^5.16.1"
   },
   "devDependencies": {
